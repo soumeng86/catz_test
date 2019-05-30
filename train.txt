@@ -10,13 +10,13 @@ import os
 from PIL import Image
 import numpy as np
 from keras import backend as K
-from keras.layers import LSTM, Dense, Dropout, Masking, Embedding,Input,Reshape,Lambda,Flatten
+from keras.layers import LSTM, Dense, Dropout, Masking, Embedding,Input,Reshape,Lambda
 
 run = wandb.init(project='catz_test')
 config = run.config
 
-config.num_epochs = 3
-config.batch_size = 16
+config.num_epochs = 60
+config.batch_size = 32
 config.img_dir = "images"
 config.height = 96
 config.width = 96
@@ -81,31 +81,20 @@ def my_generator(batch_size, img_dir):
 
 
 model = Sequential()
-model.add(Conv2D(32, (3, 3), activation='relu', padding='same',
+'''model.add(Conv2D(32, (3, 3), activation='relu', padding='same',
                  input_shape=(config.height, config.width, 5 * 3)))
 model.add(MaxPooling2D(2, 2))
-print(model.summary())
-
 model.add(Conv2D(32, (3, 3), activation='relu', padding='same'))
 model.add(UpSampling2D((2, 2)))
 model.add(Conv2D(3, (3, 3), activation='relu', padding='same'))
 print(model.summary())
-
-#model.add(Flatten())
-#model.add(Dense(96*96*3, activation='relu'))
-#model.add(Reshape((96,96,3)))
-#print(model.summary())
-
-
-
-
 #model.add(Reshape(input_shape=(1,96, 96, 3)))
-#conv_to_LSTM_dims = (1, 96, 96, 3)
-#model.add(Reshape(target_shape=conv_to_LSTM_dims))
-#model.add(Lambda(lambda x: x[:, :, :, 12:15], input_shape=(config.height, config.width, 5 * 3)))
+conv_to_LSTM_dims = (1, 96, 96, 3)
+model.add(Reshape(target_shape=conv_to_LSTM_dims))'''
+model.add(Lambda(lambda x: x[:, :, :, 12:15], input_shape=(config.height, config.width, 5 * 3)))
 
 
-#print(model.summary())
+print(model.summary())
 #LSTM_to_conv_dims = (96,3,3)
 #model.add(Reshape(target_shape=LSTM_to_conv_dims))
 
@@ -151,20 +140,21 @@ model.add(Reshape((96,96,3)))'''
 def perceptual_distance(y_true, y_pred):
     print("y_true ::: {0}".format(y_true))
     print(y_pred)
-    rmean = (y_true[:, :, :, 1] + y_pred[:, :, :, 1]) / 2
-    r = y_true[:, :, :, 2] - y_pred[:, :, :, 2]
-    g = y_true[:, :, :, 2] - y_pred[:, :, :, 2]
+    rmean = (y_true[:, :, :, 0] + y_pred[:, :, :, 0]) / 2
+    r = y_true[:, :, :, 0] - y_pred[:, :, :, 0]
+    g = y_true[:, :, :, 1] - y_pred[:, :, :, 1]
     b = y_true[:, :, :, 2] - y_pred[:, :, :, 2]
 
-    return K.mean(K.sqrt((((128+rmean)*r*r)/256) + 1.4*g*g + (((256-rmean)*b*b)/256)))
+    return K.mean(K.sqrt((((512+rmean)*r*r)/256) + 4*g*g + (((767-rmean)*b*b)/256)))
 
 
-#model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[perceptual_distance])
+model.compile(optimizer='adam', loss='mse', metrics=[perceptual_distance])
 
 model.fit_generator(my_generator(config.batch_size, train_dir),
                     steps_per_epoch=len(
                         glob.glob(train_dir + "/*")) // config.batch_size,
                     epochs=config.num_epochs, callbacks=[
     ImageCallback(), WandbCallback()],
-       validation_steps=len(glob.glob(val_dir + "/*")) // config.batch_size,
-        validation_data=my_generator(config.batch_size, val_dir))
+    validation_steps=len(glob.glob(val_dir + "/*")) // config.batch_size,
+    validation_data=my_generator(config.batch_size, val_dir))
+model.save(os.path.join(wandb.run.dir, "model.h5"))
